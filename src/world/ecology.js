@@ -102,7 +102,7 @@ export async function populate(terrain, veg, seed, status) {
     const c = SPECIES.chestnut;
     const vet = JSON.parse(JSON.stringify(c.arch));
     vet.bole = [0.15, 0.2]; vet.l1 = { n: [3, 4], ang: [12, 34], len: [0.5, 0.64], rad: 0.74, up: 0.34 }; vet.lean = 0.05; vet.flare = 1.7; vet.buttress = 0.35;
-    mk('chestnut', 'veteran', 0, vet, 31, 2.25, { gnarl: 1.6 });
+    mk('chestnut', 'veteran', 0, vet, 31, 2.7, { gnarl: 1.6 }); // ~3 m, as the giants in old photographs
   }
   for (const spKey of [...UNDER, ...SHRUBS]) {
     const sp = SPECIES[spKey];

@@ -273,7 +273,26 @@ export function tube(buf, br, radial, ringStep, bark, opts) {
   // e-folding height of the root swell: decimetres, not a tenth of the tree
   const flareH = Math.min(0.85, 0.22 + 0.5 * baseR);
   const lobes = opts.lobes ?? 5, lobePh = opts.lobePh ?? 0;
+  // Bark plates as real geometry (nearest LOD of big trunks only): broad ridges ~30 cm wide, split into
+  // staggered plates, that break the silhouette and catch light; the fine furrows stay in the bark texture.
+  const plates = isTrunk && opts.plateLOD && opts.plates ? opts.plates : 0;
+  let K = 0;
+  const plateTop = opts.plateTop ?? 10;
+  if (plates) { K = Math.max(12, Math.round((2 * Math.PI * baseR) / 0.3)); radial = Math.max(radial, Math.min(200, K * 6)); }
+  const hsh = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const plateDisp = (th, y) => {
+    // lanes drift and spiral gently with height; K is an integer, so the pattern closes around the stem
+    const L = th * K / 6.283185 + 0.55 * Math.sin(y * 0.21 + lobePh) + 0.25 * Math.sin(y * 0.67 + 2.0 * lobePh) + y * 0.045;
+    const li0 = Math.floor(L), f = L - li0, li = ((li0 % K) + K) % K;
+    const seg = Math.floor(y / (0.8 + 1.4 * hsh(li)) + hsh(li + 17));
+    const hgt = 0.5 + 0.5 * hsh(li * 7.1 + seg * 13.3);
+    // rounded shoulders, a narrow V fissure on one side, a wider shallow valley on the other
+    const prof = smoothstep(0.0, 0.2, f) * (1 - smoothstep(0.58, 1.0, f));
+    return hgt * prof - 0.45;
+  };
+  let rows = 0;
   const addRing = (P, r, dir, v, t, extraY, ky = 1) => {
+    rows++;
     // parallel transport
     nx = norm(sub(nx, mul(dir, dot(nx, dir))));
     const by = cross(dir, nx);
@@ -300,8 +319,23 @@ export function tube(buf, br, radial, ringStep, bark, opts) {
       }
       const c = Math.cos(th), s = Math.sin(th);
       const ox = nx[0] * c + by[0] * s, oy = nx[1] * c + by[1] * s, oz = nx[2] * c + by[2] * s;
+      let pn = null;
+      if (plates) {
+        const fade = (1 - smoothstep(plateTop * 0.55, plateTop, y)) * smoothstep(-1.2, -0.2, y);
+        if (fade > 0) {
+          const amp = plates * fade * Math.min(0.17, 0.12 * r);
+          rr += amp * plateDisp(th, y);
+          // normal from the displacement's slope around and along the stem
+          const e = 0.5 / K;
+          const dS = (plateDisp(th + e, y) - plateDisp(th - e, y)) / (2 * e) * amp / Math.max(rr, 0.05);
+          const dY = (plateDisp(th, y + 0.04) - plateDisp(th, y - 0.04)) / 0.08 * amp;
+          const tx = -nx[0] * s + by[0] * c, ty = -nx[1] * s + by[1] * c, tz = -nx[2] * s + by[2] * c;
+          pn = norm([ox - dS * tx - dY * dir[0], oy - dS * ty - dY * dir[1], oz - dS * tz - dY * dir[2]]);
+        }
+      }
       buf.pos.push(P[0] + ox * rr, P[1] + oy * rr * ky + (extraY || 0), P[2] + oz * rr);
-      if (ky !== 1) { const l = Math.hypot(ox, oy / ky, oz) || 1; buf.nor.push(ox / l, oy / ky / l, oz / l); } else buf.nor.push(ox, oy, oz);
+      if (pn) buf.nor.push(pn[0], pn[1], pn[2]);
+      else if (ky !== 1) { const l = Math.hypot(ox, oy / ky, oz) || 1; buf.nor.push(ox / l, oy / ky / l, oz / l); } else buf.nor.push(ox, oy, oz);
       buf.uv.push((j / radial) * uRep, v);
       // colour: r = ao, g = flex, b = height above base (for moss / soil staining), a = level
       const ao = isTrunk ? lerp(0.45, 1.0, smoothstep(-0.2, 0.9 + flareH, y)) : br.isRoot ? lerp(0.5, 0.92, smoothstep(-0.1, 0.6, y)) : (opts.limbAO ?? 0.8);
@@ -317,10 +351,22 @@ export function tube(buf, br, radial, ringStep, bark, opts) {
     const i = rings[k];
     const P = pts[i].p;
     const dir = i === 0 ? d0 : i === n - 1 ? norm(sub(pts[i].p, pts[i - 1].p)) : norm(sub(pts[i + 1].p, pts[i - 1].p));
-    if (k > 0) vAcc += len(sub(P, pts[rings[k - 1]].p)) / bark.tile[1];
+    if (k > 0) {
+      const ip = rings[k - 1], Pp = pts[ip].p, segL = len(sub(P, Pp));
+      // plated trunks need rings every decimetre or two low down, where the eye is
+      if (plates && Math.min(P[1], Pp[1]) < plateTop) {
+        const ym = 0.5 * (P[1] + Pp[1]) - pts[0].p[1];
+        const nsub = Math.ceil(segL / (ym < 4 ? 0.12 : 0.24)) - 1;
+        for (let q = 1; q <= nsub; q++) {
+          const f = q / (nsub + 1);
+          addRing(mix3(Pp, P, f), lerp(pts[ip].r, pts[i].r, f), dir, vAcc + f * segL / bark.tile[1], lerp(ip, i, f) / (n - 1), 0, lerp(pts[ip].ky ?? 1, pts[i].ky ?? 1, f));
+        }
+      }
+      vAcc += segL / bark.tile[1];
+    }
     addRing(P, pts[i].r, dir, vAcc, i / (n - 1), 0, pts[i].ky ?? 1);
   }
-  const nr = rings.length + (isTrunk ? 1 : 0);
+  const nr = rows;
   for (let k = 0; k < nr - 1; k++) for (let j = 0; j < radial; j++) {
     const a = start + k * (radial + 1) + j, b = a + 1, c = a + radial + 1, d = c + 1;
     // counter-clockwise seen from outside: the outer surface is the front face
@@ -416,7 +462,8 @@ function prepare(def, arch, size, seed, q) {
     const out = Math.hypot(c.p[0], c.p[2]);
     c.flex = clamp(0.12 + 0.03 * c.p[1] + 0.07 * out, 0, 3) * (arch.form === 'shrub' ? 1.3 : 1);
   }
-  const topt = { flute: arch.flute ?? 0, H: size.h, flare: arch.flare ?? 1.2, flareH: arch.flareH ?? 0.05, buttress: arch.buttress ?? 0, lobes: rng.i(4, 7), lobePh: rng.f(0, 6.28), burl: big ? 0.05 : 0 };
+  const topt = { flute: arch.flute ?? 0, H: size.h, flare: arch.flare ?? 1.2, flareH: arch.flareH ?? 0.05, buttress: arch.buttress ?? 0, lobes: rng.i(4, 7), lobePh: rng.f(0, 6.28), burl: big ? 0.05 : 0,
+    plates: big && size.dbh > 0.5 ? (arch.plates ?? 0) : 0, plateTop: Math.min(12, 0.32 * size.h) };
   // root spurs: the flare of an old trunk runs out into surface roots that dive under the litter
   if (arch.form !== 'shrub' && size.dbh > 0.14 && sk.branches.length && sk.branches[0].isTrunk) {
     const rr = rng.fork('roots');
@@ -470,7 +517,7 @@ export function generatePlant(def, arch, size, bark, atlas, seed, q = {}) {
       // skip hair-thin twigs at lower detail
       if (L > 0 && br.pts[0].r < 0.012 * (L === 1 ? 1 : 3)) continue;
       if (br.isRoot && L === 2) continue;
-      tube(bb, br, br.isRoot ? Math.max(5, Math.round(s.rad[1] * 0.9)) : s.rad[Math.min(3, br.level)], br.isTrunk ? Math.max(1, s.step - (L === 0 ? 0 : 1)) : s.step, bark, topt);
+      tube(bb, br, br.isRoot ? Math.max(5, Math.round(s.rad[1] * 0.9)) : s.rad[Math.min(3, br.level)], br.isTrunk ? Math.max(1, s.step - (L === 0 ? 0 : 1)) : s.step, bark, L === 0 ? { ...topt, plateLOD: true } : topt);
     }
     const lb = new Buf();
     cards(lb, sk, atlas.cells, s.keep, s.mul, s.cross, rng.fork('cards' + L), flatness, s.bend);

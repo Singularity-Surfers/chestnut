@@ -14,9 +14,9 @@ export const SPECIES = {
   // ============================================================ canopy
   chestnut: {
     name: 'American chestnut', sci: 'Castanea dentata', leaf: 'chestnut', bark: 'chestnut', layer: 'canopy',
-    share: 0.35, h: [27, 36], dbh: [0.8, 1.5], giant: { h: [34, 40], dbh: [1.6, 2.4], p: 0.22 },
+    share: 0.35, h: [27, 36], dbh: [1.0, 1.8], giant: { h: [34, 40], dbh: [2.0, 2.7], p: 0.22 },
     niche: { m: [0.08, 0.42, 0.82], pos: 'any' }, trans: 0.95, hueVar: 0.10, sparse: 0.82,
-    arch: { form: 'decurrent', bole: [0.44, 0.58], flare: 1.55, flareH: 0.06, buttress: 0.22, lean: 0.03, wobble: 0.012, shape: 'round',
+    arch: { form: 'decurrent', plates: 1, bole: [0.44, 0.58], flare: 1.55, flareH: 0.06, buttress: 0.22, lean: 0.03, wobble: 0.012, shape: 'round',
       l1: { n: [5, 7], ang: deg(38, 78), len: [0.42, 0.60], rad: 0.60, up: 0.12 },
       l2: { n: [5, 7], ang: deg(32, 66), len: [0.48, 0.70], rad: 0.52, up: 0.08 },
       l3: { n: [4, 6], ang: deg(30, 68), len: [0.45, 0.7], rad: 0.5, up: 0.0 }, droop: 0.25, spread: 1.0 },
