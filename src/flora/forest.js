@@ -46,6 +46,8 @@ void main(){
   vec3 B = cross(N, T);
   vec2 nxy = nm.xy*2.0 - 1.0;
   vec3 Nw = normalize(T*nxy.x + B*nxy.y + N*sqrt(max(1.0 - dot(nxy, nxy), 0.08)));
+  // the card normal leans to the upper (adaxial) side: seen from it, a leaf's underside, paler and duller
+  float under = step(dot(N, V), 0.0);
   if (dot(Nw, V) < 0.0) Nw = -Nw;
   vec3 Ns = normalize(mix(Nw, normalize(vCrownN), uCrownBlend));
   vec3 alb = a.rgb;
@@ -56,6 +58,7 @@ void main(){
   float bz = smoothstep(0.60, 0.95, fract(s2 + fract(s1*3.1)) + (fract(s1*9.7) - 0.5)*0.4)*uBronze;
   alb = mix(alb, vec3(luma(alb))*vec3(1.30, 0.92, 0.52)*0.82 + alb*0.12, bz);
   alb = saturateCol(alb, 0.90);
+  alb = mix(alb, vec3(luma(alb))*vec3(1.10, 1.04, 0.86), 0.22*under)*(1.0 - 0.06*under);
   // far crowns: the mip chain averages bright blades with twigs and the shaded undersides between them,
   // where the eye would still read the colour of the lit leaves
   float far = smoothstep(35.0, 220.0, length(cameraPosition - vWorld));
@@ -68,6 +71,12 @@ void main(){
   float sh = sunShadow(vWorld, normalize(Nw + uSunDir*0.8), ign(gl_FragCoord.xy));
   // a leaf in the shade of other leaves still receives the light they transmit and scatter
   // high in the crown that scattered light is strong: gold leaves pass and reflect most of what reaches them
+  // Self-shading of the crown volume. Without it every spray in a crown takes the same full sun and the tree
+  // reads as flat stamped sprites; real crowns are lit on the sun side and at the rim, dim within, with flecks.
+  float sunSide = dot(normalize(vCrownN), uSunDir);
+  float fleck = (fract(s2*13.7 + s1*5.3) - 0.5)*0.6;
+  float selfSun = smoothstep(-0.30, 0.50, sunSide*0.6 + (vData.r - 0.62)*1.7 + fleck);
+  sh *= mix(0.28, 1.0, selfSun);
   sh = mix((0.30 + 0.22*s.above)*uTrans, 1.0, sh);
   vec3 col = shadeSurface(s, vWorld, V, sh);
   gl_FragColor = vec4(col, alpha);
@@ -196,7 +205,7 @@ export class Vegetation {
     const uniforms = {
       tAlbedo: { value: atlas.albedo }, tNormal: { value: atlas.normal },
       uTrans: { value: def.trans ?? 0.9 }, uGloss: { value: def.gloss ?? 0.15 }, uHueVar: { value: def.hueVar ?? 0.08 },
-      uCrownBlend: { value: def.layer === 'canopy' ? 0.42 : 0.25 }, uTexSize: { value: atlas.albedo.image?.width || 1024 },
+      uCrownBlend: { value: def.layer === 'canopy' ? 0.28 : 0.18 }, uTexSize: { value: atlas.albedo.image?.width || 1024 },
       uFlutter: { value: def.evergreen ? 0.012 : 0.028 }, uShadowKeep: { value: def.evergreen ? 0.9 : def.layer === 'canopy' ? 0.52 : 0.7 }, uBrightL: { value: def.bright ?? 1 }, uBronze: { value: def.evergreen ? 0 : (def.bronze ?? 0.35) },
     };
     const main = makeMaterial({ name: 'leaf:' + key, vs: LEAF_VS, fs: LEAF_FS, uniforms, instanced: true, wind: true, side: THREE.DoubleSide, a2c: true });

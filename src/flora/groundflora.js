@@ -460,7 +460,7 @@ varying vec3 vWorld; varying vec2 vUv; varying vec3 vN; varying vec4 vData; vary
 attribute vec4 col; varying vec3 vCol;
 #endif
 #ifdef TREE_LEAF
-attribute vec4 tan; varying float vClu;
+attribute vec4 tan; varying float vClu; varying vec3 vCrownN;
 #endif
 void main(){
   // shrink to nothing at the edge of the draw distance (no popping)
@@ -472,6 +472,7 @@ void main(){
   // a real leaf on a woody plant: sways with its branch, flutters about its petiole
   wp += windOffset(wp, data.g*3.0, uFlutter*(0.2 + tan.w)*iA.w, data.a + iB.y);
   vClu = tan.x;
+  vCrownN = wp - instPos(vec3(0.0, iB.z, 0.0));   // iB.z carries the crown-centre height, as on the cards
 #else
   wp += windOffset(wp, data.g*uFlex*iA.w, uFlutter*data.g, data.a + iB.y);
 #endif
@@ -486,7 +487,7 @@ const LEAFY_FS = /* glsl */ `
 uniform sampler2D tLeaf; uniform sampler2D tLeafN;
 uniform float uTrans, uGloss, uHueVar, uTexSize, uBright, uBrown, uCover, uBronze;
 #ifdef TREE_LEAF
-varying float vClu;
+varying float vClu; varying vec3 vCrownN;
 #endif
 varying vec3 vWorld; varying vec2 vUv; varying vec3 vN; varying vec4 vData; varying float vSeed;
 #ifdef USE_COL
@@ -548,6 +549,10 @@ void main(){
   s.rough = mix(0.74, 0.28, uGloss); s.spec = 0.22 + 0.95*uGloss; s.transCol = saturateCol(alb, 1.3)*1.2;
   s.above = smoothstep(3.0, 20.0, vWorld.y - terrainH(vWorld.xz));
   float sh = sunShadow(vWorld, normalize(Nw + uSunDir*0.8), ign(gl_FragCoord.xy));
+  // crown self-shading, matched to the cards (see LEAF_FS in forest.js)
+  float fleck = (fract(vClu*13.7 + vSeed*5.3) - 0.5)*0.6;
+  float selfSun = smoothstep(-0.30, 0.50, dot(normalize(vCrownN), uSunDir)*0.6 + (vData.r - 0.62)*1.7 + fleck);
+  sh *= mix(0.28, 1.0, selfSun);
   sh = mix(0.30*uTrans, 1.0, sh);
 #else
   float sh = sunShadow(vWorld, normalize(Nw + uSunDir*0.6), ign(gl_FragCoord.xy));
