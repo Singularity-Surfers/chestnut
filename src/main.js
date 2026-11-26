@@ -1,6 +1,6 @@
 // Chestnut Cove — bootstrap.
 import * as THREE from 'three';
-import { G, QUALITY, WORLD } from './core/engine.js';
+import { G, QUALITY, WORLD, FSPass } from './core/engine.js';
 import { Sky } from './render/sky.js';
 import { Shadows } from './render/shadows.js';
 import { Pipeline } from './render/pipeline.js';
@@ -69,6 +69,21 @@ async function boot() {
   terrain.finalize();
   status('Laying down the leaf litter…'); await tick();
   G.ground = buildGround(terrain, flora, eco);
+  // dev: window.__litterPNG('E') returns a litter texture as a PNG data URL (tools/dumplitter.mjs)
+  window.__litterPNG = (k, size = 1024) => {
+    const tex = G.ground.litters[k].albedo;
+    const rt = new THREE.WebGLRenderTarget(size, size);
+    const pass = new FSPass('uniform sampler2D t; varying vec2 vUv; void main(){ gl_FragColor = vec4(pow(texture2D(t, vUv).rgb, vec3(1.0/2.2)), 1.0); }', { t: { value: tex } });
+    pass.render(G.renderer, rt);
+    const px = new Uint8Array(size * size * 4);
+    G.renderer.readRenderTargetPixels(rt, 0, 0, size, size, px);
+    const cv = document.createElement('canvas'); cv.width = cv.height = size;
+    const id = cv.getContext('2d').createImageData(size, size);
+    for (let y = 0; y < size; y++) id.data.set(px.subarray((size - 1 - y) * size * 4, (size - y) * size * 4), y * size * 4);
+    cv.getContext('2d').putImageData(id, 0, 0);
+    rt.dispose(); pass.material.dispose();
+    return cv.toDataURL('image/png');
+  };
   status('Filling the stream…'); await tick();
   const water = buildWater(terrain);
   G.water = water;

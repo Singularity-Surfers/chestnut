@@ -55,7 +55,8 @@ vec4 cobbles(vec2 p, float scale, out vec3 nrm){
 const FS = /* glsl */ `
 varying vec3 vWorld;
 varying vec3 vNormal;
-uniform sampler2D tLitA, tLitAN, tLitB, tLitBN, tLitC, tLitCN, tLitD, tLitDN;
+uniform sampler2D tLitA, tLitAN, tLitB, tLitBN, tLitC, tLitCN, tLitD, tLitDN, tLitE, tLitEN;
+uniform float uTileE;         // tile size (m) of the humus layer E
 uniform vec4 uTiles;          // tile sizes (m) of A..D
 uniform sampler2D uLitterMap; // r: maple/red, g: needle duff, b: oak-beech, a: chestnut
 ${GROUND_COMMON}
@@ -117,6 +118,17 @@ void main(){
     float k = clamp(wD*2.4 - 0.5 + (b.a - a.a)*0.6, 0.0, 1.0);
     a = mix(a, b, k); n = mix(n, texture(tLitDN, uv), k);
   }
+  // ---- older, decomposing litter: dark humus with skeletonised leaves and fragments, where leaves lie long
+  // and damp (hollows, moist ground, the trampled shoulders of the trail) and in patches anywhere
+  float n4 = vnoise(vWorld.xz*0.33 + 11.0);
+  float wE = smoothstep(0.52, 0.80, n4*0.75 + moist*0.35 + smoothstep(0.15, 0.55, trail)*0.35 + (n2 - 0.5)*0.35 - lm.g*0.4);
+  if (wE > 0.01){
+    vec2 uv = (vWorld.xz + par)/uTileE + 0.53;
+    vec4 b = texture(tLitE, uv);
+    // fresh leaves stay on top of the humus where they are higher
+    float k = clamp(wE*2.0 - 0.4 + (b.a - a.a)*0.9, 0.0, 1.0);
+    a = mix(a, b, k); n = mix(n, texture(tLitEN, uv), k);
+  }
   vec3 albedo = a.rgb;
   // broad colour drift: damp hollows darker, drifts of fresh leaves brighter
   albedo *= 0.66 + 0.30*n3 + 0.10*(n1 - 0.5);
@@ -136,6 +148,9 @@ void main(){
   // ---- moss: stream banks, seeps, around ledges
   float mossN = fbm(vWorld.xz*0.9 + 13.0);
   float mossAmt = smoothstep(0.62, 0.86, moist*0.28 + streamProx*0.62 + rock*0.30 + (mossN - 0.5)*0.75 - hgt*0.30)*smoothstep(0.02, 0.25, above);
+  // scattered cushions of moss through the litter on damp ground, half buried by this year's leaves
+  float mossP = smoothstep(0.70, 0.86, vnoise(vWorld.xz*0.45 + 29.0)*0.7 + moist*0.45 + rock*0.2 + (mossN - 0.5)*0.4) * smoothstep(0.75, 0.35, hgt);
+  mossAmt = max(mossAmt, mossP*0.85*smoothstep(0.02, 0.25, above));
   mossAmt *= 0.9*(1.0 - soilAmt);
   if (mossAmt > 0.01){
     float m1 = vnoise(vWorld.xz*38.0), m2 = vnoise(vWorld.xz*11.0 + 3.0), m3 = vnoise(vWorld.xz*130.0);
@@ -206,6 +221,10 @@ export function buildGround(terrain, flora, eco) {
   const litD = flora.bakeLitter('duff', [['hemlock', 1.0]],
     { res: lo, tile: 1.6, old: 3400, fresh: 380, twigs: 180, browned: 0.6, soil: [0.055, 0.032, 0.018], oldTint: [1.9, 0.62, 0.22],
       freshMix: [['ybirch', 0.3], ['beech', 0.2], ['redmaple', 0.25], ['chestnut', 0.2], ['hemlock', 0.05]] });
+  // humus: years of leaves in every stage of decay, darkened, skeletonised and broken into fragments, few fresh on top
+  const litE = flora.bakeLitter('humus', [['chestnut', 0.45], ['redoak', 0.15], ['chestnutoak', 0.12], ['redmaple', 0.12], ['tulip', 0.08], ['beech', 0.08]],
+    { res: lo, tile: 1.7, old: 4200, fresh: 45, twigs: 140, browned: 0.9, decayOld: 1.0, nibbled: 0.5, soil: [0.026, 0.018, 0.012],
+      oldTint: [0.42, 0.30, 0.19] });
 
   // water surface elevation + channel distance, for wet banks and the streambed
   const F = terrain.fields;
@@ -220,6 +239,7 @@ export function buildGround(terrain, flora, eco) {
     uniforms: {
       tLitA: { value: litA.albedo }, tLitAN: { value: litA.normal }, tLitB: { value: litB.albedo }, tLitBN: { value: litB.normal },
       tLitC: { value: litC.albedo }, tLitCN: { value: litC.normal }, tLitD: { value: litD.albedo }, tLitDN: { value: litD.normal },
+      tLitE: { value: litE.albedo }, tLitEN: { value: litE.normal }, uTileE: { value: litE.tile },
       uTiles: { value: new THREE.Vector4(litA.tile, litB.tile, litC.tile, litD.tile) },
       uLitterMap: { value: eco.litterTex }, uWaterMap: { value: waterTex },
     },
@@ -234,5 +254,5 @@ export function buildGround(terrain, flora, eco) {
     terrain.group.add(m);
     registerCaster(m, depthMat, true);
   }
-  return { material: mat, litters: { A: litA, B: litB, C: litC, D: litD } };
+  return { material: mat, litters: { A: litA, B: litB, C: litC, D: litD, E: litE } };
 }

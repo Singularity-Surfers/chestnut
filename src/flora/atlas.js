@@ -20,17 +20,42 @@ void main(){
 const BAKE_FS = /* glsl */ `
 uniform sampler2D tLeaf; uniform sampler2D tLeafH; uniform float uPass; uniform float uBump; uniform vec2 uZRange;
 varying vec2 vUv; varying vec3 vCol; varying float vKind; varying vec3 vN; varying float vZ;
+float h21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x*p.y); }
+float vn21(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0 - 2.0*f);
+  return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+// distance to the nearest cell border: the network of a skeletonised leaf's veins
+float vein(vec2 p){ vec2 i = floor(p), f = fract(p); float d1 = 8.0, d2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++){ vec2 g = vec2(float(x), float(y));
+    vec2 o = vec2(h21(i + g), h21(i + g + 17.3)); float d = length(g + o - f);
+    if (d < d1){ d2 = d1; d1 = d; } else if (d < d2) d2 = d; }
+  return d2 - d1; }
 void main(){
   vec4 t = vKind < 0.5 ? texture2D(tLeaf, vUv) : vec4(1.0);
   float a = t.a;
   if (vKind > 0.5 && vKind < 1.5) a = 1.0;
   bool litter = uPass > 1.5;
+  // decomposition stage of a fallen leaf, carried as a negative kind: 0 fresh .. 1 skeletonised
+  float decay = clamp(-vKind, 0.0, 1.0);
+  vec2 lp = vUv*vec2(140.0, 140.0) + vCol.rg*91.0;   // per-leaf offset from its tint
+  if (decay > 0.0){
+    // bitten, ragged margins
+    a -= decay*0.28*smoothstep(0.35, 0.9, vn21(lp*0.35));
+    // interveinal tissue rots away, leaving the vein net and then fragments
+    float sk = smoothstep(0.62, 1.0, decay);
+    if (sk > 0.0 && vein(lp*0.5) > mix(1.2, 0.10, sk) && vn21(lp*0.12) < 0.2 + 0.55*sk) discard;
+  }
   if (a < (litter ? 0.5 : 0.08)) discard;
   vec3 n = normalize(vN);
   if (!gl_FrontFacing) n = -n;
   float hgt = clamp((vZ - uZRange.x)/(uZRange.y - uZRange.x), 0.0, 1.0);
   if (uPass < 0.5 || (litter && uPass < 2.5)){
     vec3 c = vKind < 0.5 ? t.rgb*vCol : vCol;
+    if (decay > 0.0){
+      // darkening toward loam and humus, with fungal stain spots
+      vec3 loam = vec3(0.095, 0.046, 0.022), humus = vec3(0.045, 0.030, 0.020);
+      c = mix(c, mix(loam, humus, smoothstep(0.5, 1.0, decay))*(0.8 + 0.4*vn21(lp*0.05)), smoothstep(0.1, 0.9, decay)*0.88);
+      c *= 1.0 - 0.4*decay*smoothstep(0.6, 0.85, vn21(lp*0.22));
+    }
     if (vKind > 0.5) c *= 0.55 + 0.45*sin(vUv.x*3.14159);
     if (litter){
       // deep layers are dark and damp
@@ -485,13 +510,13 @@ export class Flora {
     const bufFor = (id) => { let b = bufs.get(id); if (!b) bufs.set(id, b = new GeoBuf()); return b; };
     const ids = mix.map((m) => m[0]), w = mix.map((m) => m[1]);
     const ZMAX = 0.12;
-    const drop = (id, z, tintFn, sizeMul = 1, flat = 1) => {
+    const drop = (id, z, tintFn, sizeMul = 1, flat = 1, decay = 0) => {
       const sheet = this.sheet(id), spec = sheet.spec;
       const cells = sheet.cells;
       const cell = cells[rng.wpick(cells.map((c) => c.weight))];
       const H = (spec.len * sizeMul * rng.f(0.75, 1.1) / tile) / cell.bladeFrac, W = H * cell.aspect;
       const x = rng.next(), y = rng.next(), yaw = rng.f(0, 6.283);
-      const o = { tilt: rng.f(-0.16, 0.16) * flat, roll: rng.f(-0.3, 0.3) * flat, curl: rng.f(-0.12, 0.3) * flat, keel: rng.f(-0.1, 0.2) * flat, z, shade: tintFn(spec, sheet) };
+      const o = { tilt: rng.f(-0.16, 0.16) * flat, roll: rng.f(-0.3, 0.3) * flat, curl: rng.f(-0.12, 0.3) * flat, keel: rng.f(-0.1, 0.2) * flat, z, shade: tintFn(spec, sheet), kind: -decay };
       const m = H * 1.1;
       const b = bufFor(id);
       for (const ox of [0, x < m ? 1 : x > 1 - m ? -1 : null]) for (const oy of [0, y < m ? 1 : y > 1 - m ? -1 : null]) {
@@ -510,10 +535,18 @@ export class Flora {
       return [0, 1, 2].map((i) => s * lerp(1, clamp(lit[i] / Math.max(0.02, mean[i]), 0.25, 1.6), k));
     };
     const nOld = opts.old ?? 2200, nFresh = opts.fresh ?? 1300;
-    for (let i = 0; i < nOld; i++) drop(ids[rng.wpick(w)], 0.002 + (i / nOld) * ZMAX * 0.42, oldTint, 1, 0.8);
+    // last year's leaves underneath, in every stage of decay; the deeper, the further gone
+    const dOld = opts.decayOld ?? 0.6;
+    for (let i = 0; i < nOld; i++) {
+      const deep = 1 - i / nOld;
+      const dec = dOld > 0 ? clamp(dOld * (0.5 + 0.5 * deep) + rng.f(-0.3, 0.2)) : 0;
+      // the furthest gone are only fragments
+      drop(ids[rng.wpick(w)], 0.002 + (i / nOld) * ZMAX * 0.42, oldTint, dec > 0.8 && rng.chance(0.6) ? rng.f(0.3, 0.55) : 1, 0.8, dec);
+    }
     const fmix = opts.freshMix || mix;
     const fids = fmix.map((m) => m[0]), fw = fmix.map((m) => m[1]);
-    for (let i = 0; i < nFresh; i++) drop(fids[rng.wpick(fw)], ZMAX * 0.42 + (i / nFresh) * ZMAX * 0.5, freshTint, 1, 1.2);
+    // this autumn's leaves: mostly whole, some already darkened and nibbled
+    for (let i = 0; i < nFresh; i++) drop(fids[rng.wpick(fw)], ZMAX * 0.42 + (i / nFresh) * ZMAX * 0.5, freshTint, 1, 1.2, rng.chance(opts.nibbled ?? 0.22) ? rng.f(0.1, 0.45) : 0);
     // sticks and fine woody debris
     const tb = bufFor('__twig');
     const nTw = opts.twigs ?? 70;

@@ -32,6 +32,7 @@ Then open http://localhost:8080. Building the world takes 5–10 seconds on firs
 | `seed=N` | a different world (default `1850`) |
 | `res=0.5`…`1` | starting render scale; `dyn=0` turns automatic resolution scaling off |
 | `hud=0` | no UI |
+| `still=1` | freeze wind, water and film grain (for measuring render noise with `tools/noise.mjs`) |
 
 ## How it is put together
 

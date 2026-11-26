@@ -12,3 +12,6 @@ before-the-blight-chestnut-cove/
 
 *.log
 .DS_Store
+
+# a checkout of another branch for side-by-side serving (git worktree)
+.worktrees/
