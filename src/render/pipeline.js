@@ -145,7 +145,7 @@ void main(){
   float radius = clamp(z*0.2, 0.10, 0.8);
   float rpx = radius*uRes.y*0.9/max(z, 0.2); // projected radius in pixels
   rpx = clamp(rpx, 3.0, 90.0);
-  float phi = ign(gl_FragCoord.xy + 5.588238*mod(uFrame, 64.0))*6.2831853;
+  float phi = fract(52.9829189*fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))))*6.2831853; // fixed in time: see SHADOWS
   float occ = 0.0;
   const int N_S = 12;
   for (int i = 0; i < N_S; i++){

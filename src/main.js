@@ -194,13 +194,18 @@ async function boot() {
   pipeline.fastAdapt = true;
   const fpsEl = document.getElementById('fps');
   let fAcc = 0, fN = 0, idAcc = 0;
+  const still = params.get('still') === '1';
+  if (still) pipeline.look.grain = 0;
   function frame(now) {
     requestAnimationFrame(frame);
     if (pendingResize) { resize(pendingResize); pendingResize = null; }
     const rawDt = (now - last) / 1000;
     const dt = Math.min(0.1, rawDt);
     last = now;
-    G.time += dt; G.frame++;
+    // ?still=1 freezes animated time (wind, water, falling leaves) and film grain, so what is left
+    // moving in a still view is render noise (tools/noise.mjs measures it)
+    if (!still) G.time += dt;
+    G.frame++;
     G.uniforms.uTime.value = G.time;
     G.uniforms.uFrameN.value = G.frame % 64;
     if (diag && params.has('walk')) {

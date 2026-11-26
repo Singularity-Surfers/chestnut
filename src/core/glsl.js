@@ -112,14 +112,11 @@ vec2 vogel(int i, float n, float phi){
   return r*vec2(cos(th), sin(th));
 }
 uniform float uFrameN;
-// Per-pixel, per-frame white noise for rotating shadow kernels. (Interleaved-gradient noise is better
-// distributed, but where temporal accumulation fails — foliage moving in the wind — its regular
-// lattice shows as a woven pattern; unstructured noise just reads as fine grain.)
-float ign(vec2 p){
-  vec3 p3 = fract(vec3(p.xyx + uFrameN*vec3(7.31, 3.17, 5.53))*vec3(0.1031, 0.1030, 0.0973));
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y)*p3.z);
-}
+// Per-pixel kernel rotation for the shadow filters. It must NOT change from frame to frame: a rotation
+// re-drawn every frame relies on temporal accumulation to average out, and wherever that fails
+// (moving foliage, camera motion, history clamping) penumbrae and dappled shade crawl like dark static.
+// A fixed interleaved-gradient pattern leaves at most a faint, still dither that TAA's jitter softens.
+float ign(vec2 p){ return fract(52.9829189*fract(dot(floor(p), vec2(0.06711056, 0.00583715)))); }
 
 float shadowPCSS(highp sampler2D map, vec3 sc, vec4 info, float rnd, float bias, float maxR, float minTexels, out float blockDist){
   float phi = rnd*6.2831853;
@@ -146,10 +143,8 @@ float shadowPCSS(highp sampler2D map, vec3 sc, vec4 info, float rnd, float bias,
 // returns direct-light visibility in [0,1]
 float sunShadow(vec3 wpos, vec3 N, float rnd){
   float ndl = dot(N, uSunDir);
-  // slow leafy shimmer on the static far map
-  vec2 shim = (vec2(vnoise(wpos.xz*0.7 + uTime*0.35), vnoise(wpos.zx*0.7 - uTime*0.31)) - 0.5) * 0.10 * uWind.z;
+  // (no animated offset here: a noise-driven wobble of the lookup made all distant shade swim)
   vec3 pf = wpos + N*(0.10 + 0.12*(1.0 - abs(ndl)));
-  pf.xz += shim;
   vec4 f4 = uShadowFarMat*vec4(pf, 1.0);
   vec3 fc = f4.xyz*0.5 + 0.5;
   float sFar = 1.0, bdFar = 0.0;
