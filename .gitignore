@@ -7,5 +7,8 @@ shots/
 # reference photographs collected for the brief (third-party images, not ours to redistribute)
 reference-images/
 
+# the companion build (its own repository), cloned here for comparison
+before-the-blight-chestnut-cove/
+
 *.log
 .DS_Store
