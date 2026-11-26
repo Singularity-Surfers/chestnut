@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>cluster atlases</title>
+<style>body{background:#333;margin:0;overflow:hidden} canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.js" } }</script>
+</head><body><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { Flora } from '../src/flora/atlas.js';
+import { SPECIES } from '../src/flora/species.js';
+const q = new URLSearchParams(location.search);
+const only = (q.get('only') || 'chestnut,redmaple').split(',');
+const showN = q.get('n') === '1';
+try {
+  const canvas = document.getElementById('c');
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+  r.setSize(innerWidth, innerHeight, false);
+  const flora = new Flora(r, 1850, parseInt(q.get('res') || '1024', 10));
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(q.get('bg') || '#6a7f96');
+  const n = only.length, cols = Math.ceil(Math.sqrt(n * innerWidth / innerHeight)), rows = Math.ceil(n / cols);
+  const cam = new THREE.OrthographicCamera(0, cols, rows, 0, -1, 1);
+  only.forEach((id, i) => {
+    const sp = SPECIES[id];
+    const t0 = performance.now();
+    const a = flora.atlas(id, sp.leaf, sp.cl);
+    console.log('[info] ' + id + ' atlas ' + (performance.now() - t0).toFixed(0) + ' ms');
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.98), new THREE.MeshBasicMaterial({ map: showN ? a.normal : a.albedo, transparent: !showN, alphaTest: showN ? 0 : 0.02 }));
+    m.position.set((i % cols) + 0.5, rows - 0.5 - Math.floor(i / cols), 0);
+    scene.add(m);
+  });
+  r.render(scene, cam);
+  requestAnimationFrame(() => { r.render(scene, cam); window.__READY = true; });
+} catch (e) { console.error(e); window.__ERROR = String(e.stack || e); }
+</script></body></html>

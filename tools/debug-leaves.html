@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>leaf sheets</title>
+<style>body{background:#3a3a3a;color:#fff;font:12px sans-serif;margin:8px} .s{display:inline-block;margin:4px;vertical-align:top;background:#555} canvas{display:block;max-width:760px;height:auto} .h{background:#222}</style>
+</head><body>
+<div id="out"></div>
+<script type="module">
+import { LEAVES } from '../src/flora/leaves.js';
+import { paintLeafSheet } from '../src/flora/leafpaint.js';
+const q = new URLSearchParams(location.search);
+const only = q.get('only') ? q.get('only').split(',') : null;
+const res = parseInt(q.get('res') || '200', 10);
+const showH = q.get('h') === '1';
+const out = document.getElementById('out');
+try {
+  let i = 0;
+  for (const [id, spec] of Object.entries(LEAVES)) {
+    if (only && !only.includes(id)) continue;
+    const t0 = performance.now();
+    const sh = paintLeafSheet(spec, 1000 + i++, q.get('res') ? { res } : {});
+    const d = document.createElement('div'); d.className = 's';
+    d.innerHTML = `<div>${id} — ${(performance.now() - t0).toFixed(0)} ms</div>`;
+    d.appendChild(sh.canvas);
+    if (showH) { sh.hcanvas.className = 'h'; d.appendChild(sh.hcanvas); }
+    out.appendChild(d);
+  }
+  window.__READY = true;
+} catch (e) { window.__ERROR = String(e.stack || e); }
+</script></body></html>

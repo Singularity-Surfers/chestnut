@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>bark</title>
+<style>body{background:#333;margin:0;overflow:hidden} canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.js" } }</script>
+</head><body><canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { BarkLibrary, BARKS } from '../src/flora/bark.js';
+const q = new URLSearchParams(location.search);
+const only = (q.get('only') || Object.keys(BARKS).join(',')).split(',');
+try {
+  const canvas = document.getElementById('c');
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+  r.setSize(innerWidth, innerHeight, false);
+  const lib = new BarkLibrary(r, 1024);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#222');
+  const n = only.length;
+  const cam = new THREE.OrthographicCamera(0, n, 1, 0, -1, 1);
+  // lit preview: simple lambert using the baked normal + ao
+  only.forEach((id, i) => {
+    const b = lib.get(id);
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { tA: { value: b.albedo }, tN: { value: b.normal }, uRep: { value: new THREE.Vector2(1, (innerHeight / (innerWidth / n)) * 0.5 * (b.tile[0] / b.tile[1]) * 2) } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader: `uniform sampler2D tA, tN; uniform vec2 uRep; varying vec2 vUv;
+        void main(){ vec2 uv = vUv*uRep; vec3 a = texture2D(tA, uv).rgb; vec4 nn = texture2D(tN, uv);
+          vec3 n = normalize(vec3(nn.xy*2.0-1.0, 0.6)); vec3 L = normalize(vec3(0.7, 0.3, 0.5));
+          float d = max(dot(n, L), 0.0); vec3 c = a*(d*2.6 + 0.35*nn.b);
+          gl_FragColor = vec4(pow(c/(1.0+c*0.4), vec3(1.0/2.2)), 1.0); }`,
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.97, 1), mat);
+    m.position.set(i + 0.5, 0.5, 0);
+    scene.add(m);
+  });
+  r.render(scene, cam);
+  requestAnimationFrame(() => { r.render(scene, cam); window.__READY = true; });
+} catch (e) { console.error(e); window.__ERROR = String(e.stack || e); }
+</script></body></html>

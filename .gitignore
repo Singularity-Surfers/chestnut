@@ -1,0 +1,11 @@
+# dependencies (npm install restores them; the app itself runs from vendor/)
+node_modules/
+
+# working screenshots from development and reviews (large; regenerate with tools/)
+shots/
+
+# reference photographs collected for the brief (third-party images, not ours to redistribute)
+reference-images/
+
+*.log
+.DS_Store
