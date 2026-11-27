@@ -16,7 +16,9 @@ const CSS = `
   border-radius: 6px; padding: 4px 8px; cursor: pointer; }
 #ui button:hover { background: rgba(255, 220, 140, 0.2); }
 #ui button.on { background: rgba(217, 164, 65, 0.42); border-color: rgba(240, 200, 120, 0.7); }
-#ui .toggle { position: absolute; right: 12px; top: 12px; font-size: 18px; padding: 3px 10px; }
+#ui .toggle { position: absolute; right: 12px; top: 12px; font-size: 18px; padding: 3px 10px; background: rgba(18, 15, 10, 0.72); backdrop-filter: blur(8px); }
+#ui .toggle:hover { background: rgba(60, 46, 22, 0.85); }
+#ui .min { position: absolute; right: 8px; top: 8px; width: 26px; height: 24px; padding: 0; font-size: 16px; line-height: 1; }
 #ui .ident { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); text-align: center; text-shadow: 0 1px 6px #000, 0 0 2px #000; font-size: 16px; transition: opacity 0.4s; white-space: nowrap; }
 #ui .ident i { display: block; font-size: 13px; opacity: 0.85; }
 #ui .cross { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: rgba(255,255,255,0.45); }
@@ -42,7 +44,8 @@ export class Panel {
       <div class="ident" id="ident"></div>
       <button class="toggle" id="uiToggle" title="Settings (Tab)">☰</button>
       <div class="card closed" id="card">
-        <h2>Chestnut Cove</h2>
+        <button class="min" id="uiMin" title="Minimize (Tab)" aria-label="Minimize settings">–</button>
+        <h2 style="padding-right:30px">Chestnut Cove</h2>
         <div class="sub">Southern Appalachians · mid-October · c. 1850</div>
         <label>Time of day <span class="val" id="hourVal"></span></label>
         <input type="range" id="hour" min="5.5" max="19.5" step="0.05">
@@ -63,6 +66,7 @@ export class Panel {
     const $ = (id) => root.querySelector('#' + id);
     this.card = $('card'); this.ident = $('ident');
     $('uiToggle').onclick = () => this.card.classList.toggle('closed');
+    $('uiMin').onclick = () => this.card.classList.add('closed');
     const hour = $('hour'), hourVal = $('hourVal');
     hour.oninput = () => { app.setHour(parseFloat(hour.value)); };
     this.syncHour = (h) => { hour.value = h; hourVal.textContent = fmtHour(h); };
